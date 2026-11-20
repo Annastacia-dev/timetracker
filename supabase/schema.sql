@@ -500,3 +500,19 @@ create policy tt_screens_read on storage.objects for select to authenticated
 create policy tt_screens_delete on storage.objects for delete to authenticated
   using (bucket_id = 'screenshots'
     and (split_part(name, '/', 2) = auth.uid()::text or public.is_admin(public.path_team(name))));
+
+-- ---------------------------------------------------------------------------------------------
+-- Hardening (Supabase security advisor)
+-- ---------------------------------------------------------------------------------------------
+alter function public.path_team(text) set search_path = '';
+alter function public.touch_updated_at() set search_path = '';
+alter function public.guard_time_entry() set search_path = '';
+alter function public.guard_owned_row() set search_path = '';
+alter function public.guard_team_row() set search_path = '';
+
+-- Policy helpers are only needed by signed-in users (all policies are "to authenticated").
+revoke execute on function public.is_member(uuid), public.is_admin(uuid), public.shares_team(uuid) from public, anon;
+grant execute on function public.is_member(uuid), public.is_admin(uuid), public.shares_team(uuid) to authenticated;
+
+-- The sign-up trigger function is never called directly.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;

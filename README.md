@@ -25,7 +25,7 @@ It runs in one of two modes:
 1. Create a free project at [supabase.com](https://supabase.com).
 2. In **SQL Editor → New query**, paste all of [supabase/schema.sql](supabase/schema.sql) and run it once.
 3. In **Project Settings → API**, copy the Project URL and the **anon / publishable** key (never the `service_role` / secret key). Save them as `app-config.json` in the project root, following `app-config.example.json`. This file is git-ignored and bundled into the installer. The anon key is safe to ship in the app because row-level security protects the data.
-4. **Authentication → Sign In / Providers → Email**: for an internal team you can turn off **Confirm email**. If you leave it on, people click the emailed link, then sign in from the app.
+4. **Authentication → URL Configuration → Redirect URLs**: add `timetracker://**` so confirmation and password-reset emails open the app and sign the person in. Optionally turn off **Confirm email** under **Sign In / Providers → Email** for an internal team.
 5. Run `npm run dev`, create an account, create your team, then invite teammates from **Team**.
 
 `npm run test:schema` loads the schema into an in-process Postgres (PGlite) and checks 52 access rules: members can't read each other's time, can't change rates or invoices, outsiders see nothing, invoiced time is locked, and so on.

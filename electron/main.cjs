@@ -14,6 +14,10 @@ const BLOCK_MS = Number(process.env.TT_BLOCK_MS) || 10 * 60 * 1000;
 const SYNC_EVERY_MS = 60 * 1000;
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const APP_ROOT = path.join(__dirname, '..');
+// Email confirmation and password-reset links come back to the app through this URL scheme.
+// Add it under Supabase → Authentication → URL Configuration → Redirect URLs.
+const PROTOCOL = 'timetracker';
+const AUTH_REDIRECT = `${PROTOCOL}://auth/callback`;
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'tt-shot', privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -560,6 +564,49 @@ async function initAccount() {
   commit();
 }
 
+// ---------- timetracker:// auth links ----------
+const findLink = (argv) => argv.find((a) => typeof a === 'string' && a.startsWith(`${PROTOCOL}://`));
+let pendingLink = findLink(process.argv);
+
+function registerProtocol() {
+  if (process.env.TT_LOCAL === '1') return; // tests must not take over the scheme
+  if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL);
+  else app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [APP_ROOT]);
+}
+
+async function handleAuthLink(link) {
+  if (!sb) { pendingLink = link; return; }
+  showWindow();
+  let params;
+  try {
+    const u = new URL(link);
+    params = new URLSearchParams(u.hash.replace(/^#/, ''));
+    for (const [k, v] of u.searchParams) params.set(k, v);
+  } catch {
+    return;
+  }
+  console.log('[auth-link] received', params.get('type') || (params.get('code') ? 'code' : params.get('error') ? 'error' : 'unknown'));
+  const failure = params.get('error_description') || params.get('error');
+  if (failure) return toast(`That link didn't work (${failure}). Request a new one.`, 'error');
+  try {
+    let session = null;
+    if (params.get('code')) session = cloudLib.must(await sb.auth.exchangeCodeForSession(params.get('code'))).session;
+    else if (params.get('access_token') && params.get('refresh_token'))
+      session = cloudLib.must(await sb.auth.setSession({
+        access_token: params.get('access_token'), refresh_token: params.get('refresh_token'),
+      })).session;
+    if (!session) return;
+    if (account.user?.id !== session.user.id) {
+      if (account.user) afterSignOut();
+      await afterSignIn(session.user);
+    }
+    if (params.get('type') === 'recovery') win.webContents.send('auth:recovery');
+    else toast("Email confirmed. You're signed in.");
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
 function requireCloudAdmin() {
   if (!store) throw new Error('Open a team first.');
   if (!isAdmin()) throw new Error('Only team admins can do that.');
@@ -651,7 +698,8 @@ function registerIpc() {
   handle('auth:signUp', async ({ name, email, password }) => {
     if (!String(name || '').trim()) throw new Error('Enter your name.');
     const data = cloudLib.must(await sb.auth.signUp({
-      email: String(email).trim(), password, options: { data: { full_name: String(name).trim() } },
+      email: String(email).trim(), password,
+      options: { data: { full_name: String(name).trim() }, emailRedirectTo: AUTH_REDIRECT },
     }));
     if (!data.session) return { confirm: true }; // email confirmation is on
     await afterSignIn(data.user);
@@ -665,7 +713,12 @@ function registerIpc() {
     afterSignOut();
   });
   handle('auth:resetPassword', async (email) => {
-    cloudLib.must(await sb.auth.resetPasswordForEmail(String(email).trim()));
+    cloudLib.must(await sb.auth.resetPasswordForEmail(String(email).trim(), { redirectTo: AUTH_REDIRECT }));
+  });
+  handle('auth:updatePassword', async (password) => {
+    if (String(password || '').length < 8) throw new Error('Use at least 8 characters.');
+    cloudLib.must(await sb.auth.updateUser({ password }));
+    return true;
   });
 
   handle('team:create', async (name) => {
@@ -870,10 +923,16 @@ function registerIpc() {
 }
 
 // ---------- lifecycle ----------
-app.on('second-instance', showWindow);
+app.on('second-instance', (_e, argv) => {
+  showWindow();
+  const link = findLink(argv);
+  if (link) handleAuthLink(link);
+});
+app.on('open-url', (e, url) => { e.preventDefault(); handleAuthLink(url); }); // macOS
 
 app.whenReady().then(async () => {
   ensureDevShortcut();
+  registerProtocol();
   userData = app.getPath('userData');
   shotsDir = path.join(userData, 'screenshots');
   loadPrefs();
@@ -901,6 +960,7 @@ app.whenReady().then(async () => {
   tray.on('click', showWindow);
   await initAccount();
   updateTray();
+  if (pendingLink) { const link = pendingLink; pendingLink = null; handleAuthLink(link); }
   setInterval(() => syncNow(), SYNC_EVERY_MS);
 
   // Locking or sleeping counts as going idle; ask about it on return.

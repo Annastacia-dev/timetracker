@@ -18,7 +18,7 @@ export function Login() {
       else {
         const res = await attempt(() => window.tt.signUp(f));
         if (res?.confirm) {
-          toast('Check your email to confirm your account, then sign in.');
+          toast('Check your email and click the link. It opens TimeTracker and signs you in.');
           setMode('signin');
         }
       }

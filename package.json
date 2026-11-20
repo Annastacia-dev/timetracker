@@ -34,7 +34,15 @@
     },
     "nsis": {
       "shortcutName": "TimeTracker"
-    }
+    },
+    "protocols": [
+      {
+        "name": "TimeTracker",
+        "schemes": [
+          "timetracker"
+        ]
+      }
+    ]
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

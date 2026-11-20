@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('tt', {
   onState: on('state:changed'),
   onIdle: on('idle:detected'),
   onToast: on('toast'),
+  onRecovery: on('auth:recovery'),
+  updatePassword: call('auth:updatePassword'),
 
   signIn: call('auth:signIn'),
   signUp: call('auth:signUp'),

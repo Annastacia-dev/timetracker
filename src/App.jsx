@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { attempt, clock, hm, setNotifier } from './lib.js';
+import { attempt, clock, hm, setNotifier, toast } from './lib.js';
 import { useNow } from './hooks.js';
 import Tracker from './views/Tracker.jsx';
 import Timesheet from './views/Timesheet.jsx';
@@ -33,6 +33,7 @@ export default function App() {
   const [tab, setTab] = useState('tracker');
   const [idle, setIdle] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => {
     const push = (text, kind) => {
@@ -45,13 +46,17 @@ export default function App() {
     const offState = window.tt.onState(setState);
     const offIdle = window.tt.onIdle(setIdle);
     const offToast = window.tt.onToast(({ text, kind }) => push(text, kind));
-    return () => { offState(); offIdle(); offToast(); };
+    const offRecovery = window.tt.onRecovery(() => setRecovery(true));
+    return () => { offState(); offIdle(); offToast(); offRecovery(); };
   }, []);
 
   const toastLayer = (
-    <div className="toasts">
-      {toasts.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
-    </div>
+    <>
+      {recovery && <NewPassword onDone={() => setRecovery(false)} />}
+      <div className="toasts">
+        {toasts.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
+      </div>
+    </>
   );
 
   if (!state) return <div className="loading">Loading…</div>;
@@ -141,6 +146,33 @@ function NavTimer({ start, onClick }) {
     <button className="nav-timer" onClick={onClick}>
       <span className="dot on" /> {clock(now - start)}
     </button>
+  );
+}
+
+// Opened by a password-reset email link; the link has already signed the user in.
+function NewPassword({ onDone }) {
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    const ok = await attempt(() => window.tt.updatePassword(pw));
+    setBusy(false);
+    if (ok) { toast('Password updated.'); onDone(); }
+  };
+  return (
+    <div className="modal-back">
+      <form className="modal" onSubmit={save}>
+        <h2>Choose a new password</h2>
+        <label>New password
+          <input type="password" autoFocus minLength={8} value={pw} onChange={(e) => setPw(e.target.value)} required />
+        </label>
+        <div className="row gap end">
+          <button type="button" onClick={onDone}>Later</button>
+          <button className="primary" disabled={busy}>Save password</button>
+        </div>
+      </form>
+    </div>
   );
 }
 
