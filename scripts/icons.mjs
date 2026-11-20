@@ -26,5 +26,29 @@ for (const [file, [src, size]] of Object.entries(out)) {
   writeFileSync(file, await png(src, size));
   console.log(`${file} (${size}px)`);
 }
+// Multi-size .ico (PNG-compressed entries) for Windows shortcuts, the taskbar and the installer.
+const sizes = [16, 24, 32, 48, 64, 128, 256];
+const images = await Promise.all(sizes.map((s) => png(svg, s)));
+const header = Buffer.alloc(6 + 16 * sizes.length);
+header.writeUInt16LE(0, 0);
+header.writeUInt16LE(1, 2); // type: icon
+header.writeUInt16LE(sizes.length, 4);
+let offset = header.length;
+sizes.forEach((s, i) => {
+  const e = 6 + 16 * i;
+  header.writeUInt8(s >= 256 ? 0 : s, e); // 0 means 256
+  header.writeUInt8(s >= 256 ? 0 : s, e + 1);
+  header.writeUInt16LE(1, e + 4); // colour planes
+  header.writeUInt16LE(32, e + 6); // bits per pixel
+  header.writeUInt32LE(images[i].length, e + 8);
+  header.writeUInt32LE(offset, e + 12);
+  offset += images[i].length;
+});
+const ico = Buffer.concat([header, ...images]);
+for (const file of ['build/icon.ico', 'electron/assets/icon.ico']) {
+  writeFileSync(file, ico);
+  console.log(`${file} (${sizes.join(', ')}px)`);
+}
+
 copyFileSync('assets/logo.svg', 'src/assets/logo.svg');
 console.log('src/assets/logo.svg');

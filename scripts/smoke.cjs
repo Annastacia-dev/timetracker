@@ -47,6 +47,14 @@ async function run(win) {
     js(`[...document.querySelectorAll('.nav-item')].find(b => b.textContent.trim() ===${JSON.stringify(label)}).click()`);
 
   await sleep(500);
+  check(app.getName() === 'TimeTracker', `app name is "${app.getName()}"`);
+  if (process.platform === 'win32') {
+    const { shell } = require('electron');
+    const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'TimeTracker (dev).lnk');
+    const sc = fs.existsSync(lnk) && shell.readShortcutLink(lnk);
+    check(!!sc && sc.appUserModelId === 'com.local.timetracker', 'dev Start Menu shortcut registered with the app ID');
+    check(!!sc && sc.icon.endsWith('icon.ico') && fs.existsSync(sc.icon), 'dev shortcut uses the TimeTracker icon');
+  }
   await snap('01-empty');
   check(await js(`document.body.innerText.includes('Track time for your clients')`), 'empty state shows onboarding');
 

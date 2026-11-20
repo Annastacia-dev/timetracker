@@ -16,7 +16,35 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'tt-shot', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
+// Windows uses this ID to group taskbar buttons and to label notifications. It matches build.appId.
+const APP_ID = 'com.local.timetracker';
+app.setName('TimeTracker');
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
+
 if (!app.requestSingleInstanceLock()) app.quit();
+
+// Windows takes a notification's app name and the taskbar icon from a Start Menu shortcut registered
+// under the app ID. The installer creates one; in development we register our own so the bare
+// electron.exe does not show up as "Electron" with Electron's logo.
+function ensureDevShortcut() {
+  if (app.isPackaged || process.platform !== 'win32') return;
+  const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'TimeTracker (dev).lnk');
+  const want = {
+    target: process.execPath,
+    args: `"${path.join(__dirname, '..')}"`,
+    appUserModelId: APP_ID,
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
+    iconIndex: 0,
+    description: 'TimeTracker (development build)',
+  };
+  try {
+    const have = fs.existsSync(lnk) ? shell.readShortcutLink(lnk) : null;
+    if (have && have.target === want.target && have.icon === want.icon && have.appUserModelId === APP_ID) return;
+    shell.writeShortcutLink(lnk, have ? 'replace' : 'create', want);
+  } catch (err) {
+    console.warn('could not register dev shortcut', err);
+  }
+}
 
 let store, win, tray, shotsDir;
 let tickTimer = null;
@@ -196,7 +224,7 @@ function promptIdle() {
   showWindow();
   win.webContents.send('idle:detected', { since: idle.since, now: Date.now() });
   if (Notification.isSupported())
-    new Notification({ title: 'You were idle', body: 'Choose whether to keep or discard the idle time.' }).show();
+    new Notification({ icon: asset('icon.png'), title: 'You were idle', body: 'Choose whether to keep or discard the idle time.' }).show();
 }
 
 function resolveIdle(action) {
@@ -229,7 +257,7 @@ async function captureScreenshot(b, entry) {
     if (saved) saved.screenshot = rel;
     if (!S().entries.some((x) => x.id === b.entryId)) removeShotFile(rel);
     if (Notification.isSupported())
-      new Notification({ title: 'Screenshot captured', body: projectLabel(entry.projectId), silent: true }).show();
+      new Notification({ icon: asset('icon.png'), title: 'Screenshot captured', body: projectLabel(entry.projectId), silent: true }).show();
     commit();
   } catch (err) {
     console.error('screenshot failed', err);
@@ -246,7 +274,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'TimeTracker',
-    icon: asset('icon.png'),
+    icon: asset(process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     backgroundColor: '#f5f6f8',
     autoHideMenuBar: true,
     webPreferences: {
@@ -269,7 +297,7 @@ function createWindow() {
       ev.preventDefault();
       win.hide();
       if (runningEntry() && Notification.isSupported())
-        new Notification({ title: 'Still tracking', body: 'TimeTracker keeps running in the tray.', silent: true }).show();
+        new Notification({ icon: asset('icon.png'), title: 'Still tracking', body: 'TimeTracker keeps running in the tray.', silent: true }).show();
     }
   });
 }
@@ -450,7 +478,7 @@ function registerIpc() {
 app.on('second-instance', showWindow);
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('com.local.timetracker');
+  ensureDevShortcut();
   store = new Store(path.join(app.getPath('userData'), 'timetracker.json'));
   shotsDir = path.join(app.getPath('userData'), 'screenshots');
 

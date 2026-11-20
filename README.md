@@ -38,6 +38,7 @@ Settings → Data shows the exact paths.
 - Typeface: [Geist](https://vercel.com/font) (UI, invoices) and Geist Mono (timers), bundled locally via Fontsource.
 - Icons: [Lucide](https://lucide.dev).
 - Logo: `assets/logo.svg`; generated icons live in `build/`, `electron/assets/` and `public/`.
+- Windows takes the taskbar icon and the notification app name from a Start Menu shortcut registered under the app ID (`com.local.timetracker`). The installer creates `TimeTracker`. Dev runs register `TimeTracker (dev)` automatically, so notifications show that name instead of "Electron". Delete it from `%APPDATA%\Microsoft\Windows\Start Menu\Programs` if you no longer need it.
 
 ## Layout
 
