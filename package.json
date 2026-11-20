@@ -1,0 +1,46 @@
+{
+  "name": "timetracker",
+  "productName": "TimeTracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop time tracker for client projects: timer, idle detection, screenshots, activity, reports and invoices.",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build",
+    "start": "vite build && node scripts/start.mjs",
+    "dist": "vite build && electron-builder --win",
+    "smoke": "vite build && node scripts/smoke-run.mjs",
+    "postinstall": "node node_modules/electron/install.js",
+    "icons": "node scripts/icons.mjs"
+  },
+  "build": {
+    "appId": "com.local.timetracker",
+    "productName": "TimeTracker",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "lucide-react": "^1.76.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "sharp": "^0.35.5",
+    "vite": "^8.3.8"
+  }
+}
