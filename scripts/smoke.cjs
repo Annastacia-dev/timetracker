@@ -54,6 +54,12 @@ async function run(win) {
     const sc = fs.existsSync(lnk) && shell.readShortcutLink(lnk);
     check(!!sc && sc.appUserModelId === 'com.local.timetracker', 'dev Start Menu shortcut registered with the app ID');
     check(!!sc && sc.icon.endsWith('icon.ico') && fs.existsSync(sc.icon), 'dev shortcut uses the TimeTracker icon');
+    await sleep(1000);
+    const regOut = require('node:child_process')
+      .spawnSync('reg.exe', ['query', 'HKCU\\Software\\Classes\\AppUserModelId\\com.local.timetracker', '/v', 'DisplayName'], { encoding: 'utf8' }).stdout || '';
+    check(regOut.includes('TimeTracker (dev)'), 'toast display name registered for the app ID');
+    const { Notification } = require('electron');
+    new Notification({ title: 'TimeTracker smoke test', body: 'The header above should read "TimeTracker (dev)".', silent: true }).show();
   }
   await snap('01-empty');
   check(await js(`document.body.innerText.includes('Track time for your clients')`), 'empty state shows onboarding');

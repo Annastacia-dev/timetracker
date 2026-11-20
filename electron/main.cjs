@@ -39,11 +39,20 @@ function ensureDevShortcut() {
   };
   try {
     const have = fs.existsSync(lnk) ? shell.readShortcutLink(lnk) : null;
-    if (have && have.target === want.target && have.icon === want.icon && have.appUserModelId === APP_ID) return;
-    shell.writeShortcutLink(lnk, have ? 'replace' : 'create', want);
+    const current = have && have.target === want.target && have.icon === want.icon && have.appUserModelId === APP_ID;
+    if (!current) shell.writeShortcutLink(lnk, have ? 'replace' : 'create', want);
   } catch (err) {
     console.warn('could not register dev shortcut', err);
   }
+  // Toast headers for unpackaged apps come from this per-user registry entry; without it Windows
+  // falls back to electron.exe's file description ("Electron").
+  const key = `HKCU\\Software\\Classes\\AppUserModelId\\${APP_ID}`;
+  const reg = (name, value) =>
+    require('node:child_process').execFile('reg.exe', ['add', key, '/v', name, '/t', 'REG_EXPAND_SZ', '/d', value, '/f'], { windowsHide: true }, (err) => {
+      if (err) console.warn(`could not set ${name}`, err.message);
+    });
+  reg('DisplayName', 'TimeTracker (dev)');
+  reg('IconUri', path.join(__dirname, 'assets', 'icon.png'));
 }
 
 let store, win, tray, shotsDir;
