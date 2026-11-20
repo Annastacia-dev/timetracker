@@ -52,12 +52,12 @@ async function run(win) {
     const { shell } = require('electron');
     const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'TimeTracker (dev).lnk');
     const sc = fs.existsSync(lnk) && shell.readShortcutLink(lnk);
-    check(!!sc && sc.appUserModelId === 'com.local.timetracker', 'dev Start Menu shortcut registered with the app ID');
+    check(!!sc && sc.appUserModelId === 'com.local.timetracker.dev', 'dev Start Menu shortcut registered with the dev app ID');
     check(!!sc && sc.icon.endsWith('icon.ico') && fs.existsSync(sc.icon), 'dev shortcut uses the TimeTracker icon');
     await sleep(1000);
     const regOut = require('node:child_process')
-      .spawnSync('reg.exe', ['query', 'HKCU\\Software\\Classes\\AppUserModelId\\com.local.timetracker', '/v', 'DisplayName'], { encoding: 'utf8' }).stdout || '';
-    check(regOut.includes('TimeTracker (dev)'), 'toast display name registered for the app ID');
+      .spawnSync('reg.exe', ['query', 'HKCU\\Software\\Classes\\AppUserModelId\\com.local.timetracker.dev', '/v', 'DisplayName'], { encoding: 'utf8' }).stdout || '';
+    check(regOut.includes('TimeTracker (dev)'), 'toast display name registered for the dev app ID');
     const { Notification } = require('electron');
     new Notification({ title: 'TimeTracker smoke test', body: 'The header above should read "TimeTracker (dev)".', silent: true }).show();
   }

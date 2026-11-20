@@ -24,43 +24,62 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'tt-shot', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
-// Windows uses this ID to group taskbar buttons and to label notifications. It matches build.appId.
+// Windows uses this ID to group taskbar buttons, label notifications and name pinned apps. The installed
+// build uses build.appId; development runs get their own ID, so the two never share Start Menu shortcuts
+// (Windows shows the oldest shortcut carrying an ID, which once made the installed app look like "Electron").
 const APP_ID = 'com.local.timetracker';
+const DEV_APP_ID = 'com.local.timetracker.dev';
 app.setName('TimeTracker');
-if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? APP_ID : DEV_APP_ID);
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
-// Windows takes a notification's app name and the taskbar icon from a Start Menu shortcut registered
-// under the app ID. The installer creates one; in development we register our own so the bare
-// electron.exe does not show up as "Electron" with Electron's logo.
+const START_MENU = () => path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+const regExe = (args) => new Promise((resolve) =>
+  require('node:child_process').execFile('reg.exe', args, { windowsHide: true }, (err) => resolve(!err)));
+
+// Windows takes a notification's app name, the taskbar icon and the pinned name from a Start Menu
+// shortcut registered under the app ID. The installer creates one; in development we register our own
+// so the bare electron.exe does not show up as "Electron" with Electron's logo.
 function ensureDevShortcut() {
   if (app.isPackaged || process.platform !== 'win32') return;
-  const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'TimeTracker (dev).lnk');
+  const lnk = path.join(START_MENU(), 'TimeTracker (dev).lnk');
   const want = {
     target: process.execPath,
     args: `"${APP_ROOT}"`,
-    appUserModelId: APP_ID,
+    appUserModelId: DEV_APP_ID,
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     iconIndex: 0,
     description: 'TimeTracker (development build)',
   };
   try {
     const have = fs.existsSync(lnk) ? shell.readShortcutLink(lnk) : null;
-    const current = have && have.target === want.target && have.icon === want.icon && have.appUserModelId === APP_ID;
+    const current = have && have.target === want.target && have.icon === want.icon && have.appUserModelId === DEV_APP_ID;
     if (!current) shell.writeShortcutLink(lnk, have ? 'replace' : 'create', want);
   } catch (err) {
     console.warn('could not register dev shortcut', err);
   }
   // Toast headers for unpackaged apps come from this per-user registry entry; without it Windows
   // falls back to electron.exe's file description ("Electron").
-  const key = `HKCU\\Software\\Classes\\AppUserModelId\\${APP_ID}`;
-  const reg = (name, value) =>
-    require('node:child_process').execFile('reg.exe', ['add', key, '/v', name, '/t', 'REG_EXPAND_SZ', '/d', value, '/f'], { windowsHide: true }, (err) => {
-      if (err) console.warn(`could not set ${name}`, err.message);
-    });
-  reg('DisplayName', 'TimeTracker (dev)');
-  reg('IconUri', path.join(__dirname, 'assets', 'icon.png'));
+  const key = `HKCU\\Software\\Classes\\AppUserModelId\\${DEV_APP_ID}`;
+  regExe(['add', key, '/v', 'DisplayName', '/t', 'REG_EXPAND_SZ', '/d', 'TimeTracker (dev)', '/f']);
+  regExe(['add', key, '/v', 'IconUri', '/t', 'REG_EXPAND_SZ', '/d', path.join(__dirname, 'assets', 'icon.png'), '/f']);
+}
+
+// Older development runs registered shortcuts and a registry entry under the installed app's ID.
+// Remove them so Windows uses the installer's TimeTracker shortcut. Does nothing on other PCs.
+function cleanupOldDevRegistration() {
+  if (process.platform !== 'win32') return;
+  for (const name of ['Electron.lnk', 'TimeTracker (dev).lnk']) {
+    const lnk = path.join(START_MENU(), name);
+    try {
+      if (!fs.existsSync(lnk)) continue;
+      const link = shell.readShortcutLink(lnk);
+      const devBinary = /[\\/]node_modules[\\/]electron[\\/]dist[\\/]electron\.exe$/i.test(link.target);
+      if (link.appUserModelId === APP_ID && devBinary) fs.rmSync(lnk);
+    } catch { /* unreadable shortcut: leave it */ }
+  }
+  regExe(['delete', `HKCU\\Software\\Classes\\AppUserModelId\\${APP_ID}`, '/f']);
 }
 
 // ---------- state ----------
@@ -74,6 +93,7 @@ let quitting = false;
 // Who is signed in, which team is open, and how sync is going. Sent to the renderer with the data.
 const account = {
   mode: 'local', // 'local' (no Supabase config) | 'cloud'
+  phase: 'starting', // 'starting' | 'signing-in' (checking session/teams online) | 'ready'
   user: null, // { id, email, name }
   teams: [], // [{ id, name, role }]
   teamId: null,
@@ -122,7 +142,8 @@ function viewState() {
     ...d,
     entries: live(d.entries),
     blocks: live(d.blocks),
-    account: { ...account, me: me(), isAdmin: isAdmin(), ready: !!store, pending },
+    // loaded: this team has finished at least one full sync on this PC, so an empty list really is empty.
+    account: { ...account, me: me(), isAdmin: isAdmin(), ready: !!store, loaded: account.mode === 'local' || !!d.sync?.loadedAt, pending },
   };
 }
 function broadcast() {
@@ -463,6 +484,7 @@ function syncNow() {
         if (t) Object.assign(t, { name: info.team.name, role: info.role });
       }
       await cloudLib.pullTime(sb, st.data, ctx, { removeLocalShots });
+      st.data.sync.loadedAt ??= Date.now();
       account.sync = { online: true, syncing: false, lastSyncAt: Date.now(), error: null };
     } catch (err) {
       const offline = err instanceof cloudLib.OfflineError || cloudLib.isNetwork(err);
@@ -512,6 +534,8 @@ async function afterSignIn(user, { offline = false } = {}) {
   account.user = { id: user.id, email: user.email, name: user.user_metadata?.full_name || '' };
   account.teams = prefs.teams[user.id] || [];
   if (!offline) {
+    account.phase = 'signing-in';
+    broadcast();
     try {
       cloudLib.must(await sb.rpc('accept_invites'));
       await refreshTeams();
@@ -519,6 +543,7 @@ async function afterSignIn(user, { offline = false } = {}) {
       if (!(err instanceof cloudLib.OfflineError)) toast(err.message, 'error');
     }
   }
+  account.phase = 'ready';
   const last = prefs.lastTeam[user.id];
   const pick = account.teams.find((t) => t.id === last) || account.teams[0];
   if (pick) openTeam(pick.id);
@@ -549,7 +574,7 @@ function storedUser() {
 async function initAccount() {
   const config = cloudLib.loadConfig(APP_ROOT);
   if (!config) {
-    account.mode = 'local';
+    Object.assign(account, { mode: 'local', phase: 'ready' });
     openLocal();
     return;
   }
@@ -563,6 +588,7 @@ async function initAccount() {
   if (data?.session) return afterSignIn(data.session.user);
   const offlineUser = error && cloudLib.isNetwork(error) ? storedUser() : null;
   if (offlineUser) return afterSignIn(offlineUser, { offline: true });
+  account.phase = 'ready';
   commit();
 }
 
@@ -573,7 +599,8 @@ let pendingLink = findLink(process.argv);
 function registerProtocol() {
   if (process.env.TT_LOCAL === '1') return; // tests must not take over the scheme
   if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL);
-  else app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [APP_ROOT]);
+  // Dev runs leave email links to the installed app unless asked (set TT_DEV_LINKS=1 to test them).
+  else if (process.env.TT_DEV_LINKS === '1') app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [APP_ROOT]);
 }
 
 async function handleAuthLink(link) {
@@ -934,6 +961,7 @@ app.on('open-url', (e, url) => { e.preventDefault(); handleAuthLink(url); }); //
 
 app.whenReady().then(async () => {
   ensureDevShortcut();
+  cleanupOldDevRegistration();
   registerProtocol();
   userData = app.getPath('userData');
   shotsDir = path.join(userData, 'screenshots');

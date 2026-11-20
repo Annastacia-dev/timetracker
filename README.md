@@ -74,7 +74,7 @@ The repository must stay public for updates to work without a token.
 - Typeface: [Geist](https://vercel.com/font) (UI, invoices) and Geist Mono (timers), bundled locally via Fontsource.
 - Icons: [Lucide](https://lucide.dev).
 - Logo: `assets/logo.svg`; generated icons live in `build/`, `electron/assets/` and `public/`.
-- Windows takes the taskbar icon and notification name from the app ID (`com.local.timetracker`). The installer registers `TimeTracker`. Dev runs register `TimeTracker (dev)` (a Start Menu shortcut plus `HKCU\Software\Classes\AppUserModelId\com.local.timetracker`).
+- Windows takes the taskbar icon and notification name from the app ID (`com.local.timetracker`). The installer registers `TimeTracker`. Dev runs use a separate ID, `com.local.timetracker.dev`, and register `TimeTracker (dev)`, so they never take over the installed app's name, icon or pinned shortcut. Dev runs also leave `timetracker://` email links to the installed app; set `TT_DEV_LINKS=1` to test links in dev.
 
 ## Layout
 

@@ -10,6 +10,7 @@ import Invoices from './views/Invoices.jsx';
 import Settings from './views/Settings.jsx';
 import Team from './views/Team.jsx';
 import { Login, NoTeam } from './views/Login.jsx';
+import { AppSkeleton, PageSkeleton } from './views/Skeleton.jsx';
 import logo from './assets/logo.svg';
 import {
   Briefcase, CalendarDays, ChartColumn, Cloud, CloudOff, FileText, Images, LogOut, Moon, RefreshCw,
@@ -59,8 +60,9 @@ export default function App() {
     </>
   );
 
-  if (!state) return <div className="loading">Loading…</div>;
+  if (!state) return <AppSkeleton label="Starting…" />;
   const { account } = state;
+  if (account.phase !== 'ready') return <><AppSkeleton label="Signing you in…" />{toastLayer}</>;
   if (account.mode === 'cloud' && !account.user) return <>{<Login />}{toastLayer}</>;
   if (account.mode === 'cloud' && !account.ready) return <><NoTeam state={state} />{toastLayer}</>;
 
@@ -69,6 +71,9 @@ export default function App() {
   const current = visible.find(([k]) => k === tab) || visible[0];
   const View = current[2];
   const running = state.running && state.entries.find((e) => e.id === state.running.entryId);
+  // A team that has never finished syncing on this PC would look empty; show placeholders until it has,
+  // unless we're offline or sync failed (then show what we have, with the status in the sidebar).
+  const firstSync = !account.loaded && account.sync.online && !account.sync.error;
 
   return (
     <div className="app">
@@ -88,7 +93,7 @@ export default function App() {
         </div>
       </aside>
       <main className="content">
-        <View state={state} goto={setTab} />
+        {firstSync ? <PageSkeleton label="Syncing your team's clients, projects and time…" /> : <View state={state} goto={setTab} />}
       </main>
       {idle && <IdleDialog idle={idle} onDone={() => setIdle(null)} />}
       {toastLayer}

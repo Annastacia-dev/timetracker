@@ -21,7 +21,7 @@ const DEFAULTS = {
   running: null, // { entryId, lastTick }
   nextInvoiceNo: 1,
   // Cloud mode only: incremental pull cursors and screenshot deletions waiting to reach storage.
-  sync: { entriesCursor: null, blocksCursor: null, pendingRemoteDeletes: [] },
+  sync: { entriesCursor: null, blocksCursor: null, pendingRemoteDeletes: [], loadedAt: null },
 };
 
 const uid = () => crypto.randomUUID();

@@ -188,3 +188,19 @@ fieldset.plain { border: none; margin: 0; padding: 0; min-width: 0; }
 button.wide { width: 100%; margin-top: 8px; padding: 10px; }
 .auth-links { display: flex; justify-content: space-between; margin-top: 14px; }
 .auth-card .card { margin: 14px 0; }
+
+/* Skeleton loaders */
+.sk {
+  display: block; border-radius: 6px; flex-shrink: 0;
+  background: linear-gradient(90deg, #e8ebf0 0%, #f3f5f8 40%, #e8ebf0 80%);
+  background-size: 300% 100%; animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+.nav .sk { background: linear-gradient(90deg, #2a3245 0%, #36405a 40%, #2a3245 80%); background-size: 300% 100%; }
+@keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+.sk-head { margin-bottom: 20px; }
+.sk-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.sk-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.sk-row:last-child { border-bottom: none; }
+.sk-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.sk-note { text-align: center; }
