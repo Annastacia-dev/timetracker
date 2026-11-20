@@ -8,6 +8,7 @@ const { pathToFileURL } = require('node:url');
 const { Store, uid, DEFAULTS } = require('./store.cjs');
 const { invoiceHtml } = require('./invoice.cjs');
 const cloudLib = require('./cloud.cjs');
+const updates = require('./updates.cjs');
 
 // Activity/screenshot blocks, aligned to the wall clock. TT_BLOCK_MS shortens them for the smoke test.
 const BLOCK_MS = Number(process.env.TT_BLOCK_MS) || 10 * 60 * 1000;
@@ -199,6 +200,7 @@ function updateTray() {
           ? { label: `Resume ${projectLabel(last.projectId)}`, click: () => startTimer(last.projectId, last.task) }
           : { label: 'Start timer from window', click: showWindow },
       { type: 'separator' },
+      ...(updates.ready() ? [{ label: `Restart to update to ${updates.ready()}`, click: updates.install }] : []),
       { label: 'Open TimeTracker', click: showWindow },
       { label: 'Quit', click: () => { quitting = true; app.quit(); } },
     ])
@@ -962,6 +964,13 @@ app.whenReady().then(async () => {
   updateTray();
   if (pendingLink) { const link = pendingLink; pendingLink = null; handleAuthLink(link); }
   setInterval(() => syncNow(), SYNC_EVERY_MS);
+  updates.start({
+    onReady: (version) => {
+      updateTray();
+      toast(`TimeTracker ${version} is ready. It installs when you quit, or use "Restart to update" in the tray menu.`);
+    },
+    beforeInstall: () => { quitting = true; },
+  });
 
   // Locking or sleeping counts as going idle; ask about it on return.
   const away = () => {

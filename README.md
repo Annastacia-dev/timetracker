@@ -39,7 +39,7 @@ npm start            # production build, then run
 npm run smoke        # end-to-end test (local mode) in a temp data folder; captures go to smoke-out/
 npm run test:schema  # Supabase schema + security rules against PGlite
 npm run ui:cloud     # renders the team-mode sign-in screen against a dummy URL
-npm run dist         # Windows installer via electron-builder, written to release/
+npm run dist         # Windows installer + update feed (latest.yml), written to release/
 npm run icons        # regenerate app, tray and favicon icons from assets/logo.svg
 ```
 
@@ -47,7 +47,21 @@ The project `.npmrc` sets `os=win32`, because the global npm config on this mach
 
 ## Installing and sharing
 
-`npm run dist` builds `release\TimeTracker Setup <version>.exe`, a per-user install that needs no admin rights. Share it through GitHub Releases. Until the installer is code-signed, Windows SmartScreen asks people to click **More info → Run anyway**.
+`npm run dist` builds `releaseTimeTracker-Setup-<version>.exe`, a per-user install that needs no admin rights. Your `app-config.json` is bundled in, so teammates only install and sign in. Until the installer is code-signed, Windows SmartScreen asks people to click **More info → Run anyway**.
+
+### Releasing an update
+
+Installed copies check GitHub Releases for a newer version at startup and every 6 hours, download it in the background and install it when the app quits (or right away from **Restart to update** in the tray menu).
+
+1. Raise `"version"` in `package.json` (for example `0.1.0` → `0.1.1`) and commit.
+2. `npm run dist`
+3. Create a GitHub release tagged `v<version>` and attach **both** `releaseTimeTracker-Setup-<version>.exe` and `releaselatest.yml` (also the `.blockmap`, for smaller downloads):
+
+   ```powershell
+   gh release create v0.1.1 releaseTimeTracker-Setup-0.1.1.exe releaseTimeTracker-Setup-0.1.1.exe.blockmap releaselatest.yml --title "TimeTracker 0.1.1" --notes "What changed"
+   ```
+
+The repository must stay public for updates to work without a token.
 
 ## Data
 
@@ -65,6 +79,7 @@ The project `.npmrc` sets `os=win32`, because the global npm config on this mach
 ## Layout
 
 - `electron/main.cjs`: tracker (blocks, idle, screenshots), tray, accounts/teams, sync scheduling, IPC, invoices/PDF, `tt-shot://` image protocol
+- `electron/updates.cjs`: automatic updates from GitHub Releases (installed builds only)
 - `electron/cloud.cjs`: Supabase client, encrypted session storage, record mapping, push/pull sync
 - `electron/store.cjs`: debounced, atomic JSON store
 - `electron/preload.cjs`: `window.tt` API (context-isolated, sandboxed)
