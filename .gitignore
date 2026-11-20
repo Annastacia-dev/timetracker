@@ -3,3 +3,4 @@ dist/
 release/
 *.log
 smoke-out/
+app-config.json

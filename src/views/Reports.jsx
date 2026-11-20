@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
 import {
   addDays, addMonths, attempt, csvCell, dayLabel, decHours, entryActivity, hm, hrs, inRange, lookup, money,
-  startOfDay, startOfMonth, startOfWeek, toast, ymd,
+  startOfDay, startOfMonth, startOfWeek, toast, ymd, ofUser, memberName,
 } from '../lib.js';
-import { ClientSelect } from './shared.jsx';
+import { ClientSelect, MemberSelect } from './shared.jsx';
 
 function presetRange(key, now = Date.now()) {
   const w = startOfWeek(now), m = startOfMonth(now);
@@ -22,6 +22,8 @@ export default function Reports({ state }) {
   const [preset, setPreset] = useState('week');
   const [custom, setCustom] = useState([ymd(startOfWeek(Date.now())), ymd(Date.now())]);
   const [clientId, setClientId] = useState('');
+  const [who, setWho] = useState('');
+  const team = state.account.mode === 'cloud';
 
   const [from, to] =
     preset === 'custom'
@@ -29,8 +31,10 @@ export default function Reports({ state }) {
       : presetRange(preset);
 
   const entries = useMemo(
-    () => inRange(state, from, to).filter((e) => !clientId || L.clientOf(e.projectId)?.id === clientId),
-    [state, from, to, clientId]
+    () => inRange(state, from, to)
+      .filter((e) => !clientId || L.clientOf(e.projectId)?.id === clientId)
+      .filter(ofUser(state, who)),
+    [state, from, to, clientId, who]
   );
 
   // client -> project -> totals
@@ -58,12 +62,13 @@ export default function Reports({ state }) {
 
   const exportCsv = async () => {
     if (!entries.length) return toast('Nothing to export in this range.');
-    const head = ['Date', 'Start', 'End', 'Client', 'Project', 'Task', 'Hours', 'Rate', 'Amount', 'Type', 'Activity %', 'Invoiced'];
+    const head = [...(team ? ['Member'] : []), 'Date', 'Start', 'End', 'Client', 'Project', 'Task', 'Hours', 'Rate', 'Amount', 'Type', 'Activity %', 'Invoiced'];
     const rows = [...entries]
       .sort((a, b) => a.start - b.start)
       .map((e) => {
         const h = decHours(e.ms), rate = L.rate(e.projectId);
         return [
+          ...(team ? [memberName(state, e.userId) === 'You' ? state.account.user.name || state.account.user.email : memberName(state, e.userId)] : []),
           ymd(e.start), hm(e.start), e.end ? hm(e.end) : '', L.clientOf(e.projectId)?.name || '',
           L.project(e.projectId)?.name || '', e.task, h.toFixed(2), rate.toFixed(2), (h * rate).toFixed(2),
           e.manual ? 'manual' : 'tracked', e.manual ? '' : entryActivity(state, e.id) ?? '',
@@ -97,6 +102,7 @@ export default function Reports({ state }) {
           </>
         )}
         <ClientSelect state={state} value={clientId} onChange={setClientId} allowAll />
+        <MemberSelect state={state} value={who} onChange={setWho} />
         <span className="spacer" />
         <span className="muted">{dayLabel(from)} – {dayLabel(to - 1)}</span>
       </div>
@@ -106,6 +112,8 @@ export default function Reports({ state }) {
         <div className="stat"><div className="muted small">Earnings</div><div className="stat-value">{money(totalAmt, cur)}</div></div>
         <div className="stat"><div className="muted small">Entries</div><div className="stat-value">{entries.length}</div></div>
       </div>
+
+      {team && state.account.isAdmin && who === '' && entries.length > 0 && <ByMember state={state} entries={entries} L={L} cur={cur} />}
 
       <h2>By client and project</h2>
       {!entries.length && <p className="muted">No time in this range.</p>}
@@ -165,6 +173,36 @@ function ClientRows({ c, L, cur }) {
           <td className="num">{money(p.amount, cur)}</td>
         </tr>
       ))}
+    </>
+  );
+}
+
+function ByMember({ state, entries, L, cur }) {
+  const rows = new Map();
+  for (const e of entries) {
+    const k = e.userId || state.account.me;
+    const r = rows.get(k) || { ms: 0, amount: 0, manual: 0 };
+    r.ms += e.ms;
+    r.amount += (e.ms / 3600000) * L.rate(e.projectId);
+    if (e.manual) r.manual += e.ms;
+    rows.set(k, r);
+  }
+  return (
+    <>
+      <h2>By member</h2>
+      <table className="list report">
+        <thead><tr><th>Member</th><th className="num">Hours</th><th className="num">Manual</th><th className="num">Billable</th></tr></thead>
+        <tbody>
+          {[...rows].sort((a, b) => b[1].ms - a[1].ms).map(([userId, r]) => (
+            <tr key={userId}>
+              <td>{memberName(state, userId)}</td>
+              <td className="num">{hrs(r.ms)}</td>
+              <td className="num muted">{r.manual ? hrs(r.manual) : '–'}</td>
+              <td className="num">{money(r.amount, cur)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </>
   );
 }

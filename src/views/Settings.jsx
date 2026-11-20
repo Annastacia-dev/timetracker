@@ -9,6 +9,8 @@ export default function Settings({ state }) {
   useEffect(() => setF(state.settings), [state.settings]);
 
   const set = (k, v) => setF({ ...f, [k]: v });
+  const team = state.account.mode === 'cloud';
+  const canEdit = state.account.isAdmin;
   const save = async () => {
     const ok = await attempt(() => window.tt.saveSettings({
       ...f,
@@ -21,7 +23,15 @@ export default function Settings({ state }) {
 
   return (
     <div className="page narrow">
-      <h1>Settings</h1>
+      <h1>{team ? 'Team settings' : 'Settings'}</h1>
+      {team && (
+        <p className="notice">
+          {canEdit
+            ? 'These settings apply to everyone in the team.'
+            : 'Your team admin manages these settings. They apply to everyone in the team.'}
+        </p>
+      )}
+      <fieldset className="plain" disabled={!canEdit}>
 
       <section className="card">
         <h2 className="flat">Tracking</h2>
@@ -37,7 +47,7 @@ export default function Settings({ state }) {
           Blur screenshots (shows roughly what is on screen without readable detail)
         </label>
         <p className="muted small">
-          Screenshots capture your primary display and are stored only on this computer. A notification appears after
+          Screenshots capture your primary display. {team ? 'Full-size images stay on each member’s computer; a small thumbnail is uploaded so admins can review it.' : 'They are stored only on this computer.'} A notification appears after
           each capture, and you can delete any screenshot from the work diary. Only enable this if everyone who uses this
           computer while tracking has agreed to it.
         </p>
@@ -55,7 +65,8 @@ export default function Settings({ state }) {
         </label>
       </section>
 
-      <div className="row gap end"><button className="primary" onClick={save}>Save settings</button></div>
+      {canEdit && <div className="row gap end"><button className="primary" onClick={save}>Save settings</button></div>}
+      </fieldset>
 
       <section className="card">
         <h2 className="flat">Data</h2>

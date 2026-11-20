@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useNow } from '../hooks.js';
 import {
-  actClass, addDays, attempt, dayLabel, entryActivity, fromInputs, hm, hrs, inRange, lookup, startOfDay, startOfWeek, ymd,
+  actClass, addDays, attempt, dayLabel, entryActivity, fromInputs, hm, hrs, inRange, isMine, lookup, memberName, ofUser, startOfDay, startOfWeek, ymd,
 } from '../lib.js';
-import { ProjectSelect } from './shared.jsx';
+import { MemberSelect, ProjectSelect } from './shared.jsx';
 
 export default function Timesheet({ state }) {
   const now = useNow(30000);
   const L = lookup(state);
   const [week, setWeek] = useState(startOfWeek(Date.now()));
   const [editing, setEditing] = useState(null); // entry, or {} for new
-  const entries = inRange(state, week, addDays(week, 7), now);
+  const [who, setWho] = useState(state.account.me);
+  const showWho = state.account.mode === 'cloud' && who !== state.account.me;
+  const entries = inRange(state, week, addDays(week, 7), now).filter(ofUser(state, who));
   const total = entries.reduce((s, e) => s + e.ms, 0);
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i)).reverse();
@@ -28,6 +30,7 @@ export default function Timesheet({ state }) {
         <button onClick={() => setWeek(addDays(week, 7))} disabled={week >= startOfWeek(now)}><ChevronRight size={16} /></button>
         {week !== startOfWeek(now) && <button className="link" onClick={() => setWeek(startOfWeek(now))}>This week</button>}
         <span className="spacer" />
+        <MemberSelect state={state} value={who} onChange={setWho} />
         <span>Week total <strong>{hrs(total)}</strong></span>
       </div>
 
@@ -50,7 +53,7 @@ export default function Timesheet({ state }) {
                       <td className="time">{hm(e.start)} – {e.end ? hm(e.end) : 'now'}</td>
                       <td>
                         <div>{L.label(e.projectId)}</div>
-                        <div className="muted small">{e.task || '—'}</div>
+                        <div className="muted small">{showWho ? `${memberName(state, e.userId)} · ` : ''}{e.task || '—'}</div>
                       </td>
                       <td>
                         {e.manual && <span className="tag">manual</span>}
@@ -60,7 +63,7 @@ export default function Timesheet({ state }) {
                       </td>
                       <td className="num">{hrs(e.ms)}</td>
                       <td className="num actions">
-                        {!isRunning && !e.invoiceId && (
+                        {!isRunning && !e.invoiceId && (isMine(state, e) || state.account.isAdmin) && (
                           <>
                             <button className="link" onClick={() => setEditing(e)}><Pencil size={14} /> Edit</button>
                             <button

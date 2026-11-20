@@ -8,19 +8,24 @@ import Screenshots from './views/Screenshots.jsx';
 import Clients from './views/Clients.jsx';
 import Invoices from './views/Invoices.jsx';
 import Settings from './views/Settings.jsx';
+import Team from './views/Team.jsx';
+import { Login, NoTeam } from './views/Login.jsx';
 import logo from './assets/logo.svg';
 import {
-  CalendarDays, ChartColumn, FileText, Images, Moon, Settings as SettingsIcon, Timer, Users,
+  Briefcase, CalendarDays, ChartColumn, Cloud, CloudOff, FileText, Images, LogOut, Moon, RefreshCw,
+  Settings as SettingsIcon, Timer, Users,
 } from 'lucide-react';
 
+// [key, label, view, icon, who sees it]
 const TABS = [
-  ['tracker', 'Tracker', Tracker, Timer],
-  ['timesheet', 'Timesheet', Timesheet, CalendarDays],
-  ['screenshots', 'Work diary', Screenshots, Images],
-  ['reports', 'Reports', Reports, ChartColumn],
-  ['invoices', 'Invoices', Invoices, FileText],
-  ['clients', 'Clients & projects', Clients, Users],
-  ['settings', 'Settings', Settings, SettingsIcon],
+  ['tracker', 'Tracker', Tracker, Timer, 'all'],
+  ['timesheet', 'Timesheet', Timesheet, CalendarDays, 'all'],
+  ['screenshots', 'Work diary', Screenshots, Images, 'all'],
+  ['reports', 'Reports', Reports, ChartColumn, 'all'],
+  ['invoices', 'Invoices', Invoices, FileText, 'admin'],
+  ['clients', 'Clients & projects', Clients, Briefcase, 'admin'],
+  ['team', 'Team', Team, Users, 'cloud'],
+  ['settings', 'Settings', Settings, SettingsIcon, 'all'],
 ];
 
 export default function App() {
@@ -30,21 +35,35 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
-    setNotifier((text, kind) => {
+    const push = (text, kind) => {
       const id = Math.random();
       setToasts((t) => [...t, { id, text, kind }]);
-      setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4500);
-    });
+      setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
+    };
+    setNotifier(push);
     window.tt.getState().then(setState);
     const offState = window.tt.onState(setState);
     const offIdle = window.tt.onIdle(setIdle);
-    return () => { offState(); offIdle(); };
+    const offToast = window.tt.onToast(({ text, kind }) => push(text, kind));
+    return () => { offState(); offIdle(); offToast(); };
   }, []);
 
-  if (!state) return <div className="loading">Loading…</div>;
+  const toastLayer = (
+    <div className="toasts">
+      {toasts.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
+    </div>
+  );
 
+  if (!state) return <div className="loading">Loading…</div>;
+  const { account } = state;
+  if (account.mode === 'cloud' && !account.user) return <>{<Login />}{toastLayer}</>;
+  if (account.mode === 'cloud' && !account.ready) return <><NoTeam state={state} />{toastLayer}</>;
+
+  const visible = TABS.filter(([, , , , who]) =>
+    who === 'all' || (who === 'admin' && account.isAdmin) || (who === 'cloud' && account.mode === 'cloud'));
+  const current = visible.find(([k]) => k === tab) || visible[0];
+  const View = current[2];
   const running = state.running && state.entries.find((e) => e.id === state.running.entryId);
-  const View = TABS.find(([k]) => k === tab)[2];
 
   return (
     <div className="app">
@@ -52,21 +71,65 @@ export default function App() {
         <div className="brand">
           <img src={logo} alt="" className="logo" /> TimeTracker
         </div>
-        {TABS.map(([key, label, , Icon]) => (
-          <button key={key} className={`nav-item ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>
+        {account.mode === 'cloud' && <TeamSwitcher account={account} />}
+        {visible.map(([key, label, , Icon]) => (
+          <button key={key} className={`nav-item ${current[0] === key ? 'active' : ''}`} onClick={() => setTab(key)}>
             <Icon size={17} strokeWidth={1.8} /> {label}
           </button>
         ))}
-        {running && <NavTimer start={running.start} onClick={() => setTab('tracker')} />}
+        <div className="nav-foot">
+          {running && <NavTimer start={running.start} onClick={() => setTab('tracker')} />}
+          {account.mode === 'cloud' && <AccountBox account={account} />}
+        </div>
       </aside>
       <main className="content">
         <View state={state} goto={setTab} />
       </main>
       {idle && <IdleDialog idle={idle} onDone={() => setIdle(null)} />}
-      <div className="toasts">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>
-        ))}
+      {toastLayer}
+    </div>
+  );
+}
+
+function TeamSwitcher({ account }) {
+  if (account.teams.length < 2) {
+    const t = account.teams.find((x) => x.id === account.teamId);
+    return <div className="team-name ellipsis" title={t?.name}>{t?.name}</div>;
+  }
+  return (
+    <select className="team-switch" value={account.teamId} onChange={(e) => attempt(() => window.tt.switchTeam(e.target.value))}>
+      {account.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+    </select>
+  );
+}
+
+function AccountBox({ account }) {
+  const now = useNow(30000);
+  const { sync, pending } = account;
+  const ago = sync.lastSyncAt ? Math.round((now - sync.lastSyncAt) / 60000) : null;
+  const status = !sync.online
+    ? `Offline${pending ? ` · ${pending} to sync` : ''}`
+    : sync.syncing
+      ? 'Syncing…'
+      : sync.error
+        ? 'Sync problem'
+        : pending
+          ? `${pending} to sync`
+          : ago == null ? 'Not synced yet' : ago < 1 ? 'Synced just now' : `Synced ${ago} min ago`;
+  return (
+    <div className="account-box">
+      <div className="account-user">
+        <div className="avatar">{(account.user.name || account.user.email)[0].toUpperCase()}</div>
+        <div className="ellipsis">
+          <div className="ellipsis">{account.user.name || account.user.email}</div>
+          <div className="small dim">{account.role[0].toUpperCase() + account.role.slice(1)}</div>
+        </div>
+      </div>
+      <div className="row between">
+        <button className={`sync-status ${!sync.online || sync.error ? 'warn' : ''}`} title={sync.error || 'Sync now'} onClick={() => attempt(() => window.tt.syncNow())}>
+          {sync.syncing ? <RefreshCw size={13} className="spin" /> : sync.online ? <Cloud size={13} /> : <CloudOff size={13} />} {status}
+        </button>
+        <button className="icon-btn" title="Sign out" onClick={() => attempt(() => window.tt.signOut())}><LogOut size={15} /></button>
       </div>
     </div>
   );

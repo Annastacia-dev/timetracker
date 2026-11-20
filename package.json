@@ -13,7 +13,9 @@
     "dist": "vite build && electron-builder --win",
     "smoke": "vite build && node scripts/smoke-run.mjs",
     "postinstall": "node node_modules/electron/install.js",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "test:schema": "node supabase/test-schema.mjs",
+    "ui:cloud": "vite build && node -e \"const {spawn}=require('child_process');const e=require('electron');const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;spawn(e,['scripts/cloud-ui-shot.cjs'],{stdio:'inherit',env}).on('exit',c=>process.exit(c))\""
   },
   "build": {
     "appId": "com.local.timetracker",
@@ -23,7 +25,8 @@
     },
     "files": [
       "dist/**",
-      "electron/**"
+      "electron/**",
+      "app-config.json"
     ],
     "win": {
       "target": "nsis",
@@ -36,11 +39,13 @@
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
+    "@supabase/supabase-js": "^2.119.2",
     "lucide-react": "^1.76.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.17",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.4.1",
     "electron-builder": "^26.18.0",

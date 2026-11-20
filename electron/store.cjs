@@ -20,6 +20,8 @@ const DEFAULTS = {
   invoices: [], // { id, number, clientId, from, to, lines, total, notes, createdAt, dueAt }
   running: null, // { entryId, lastTick }
   nextInvoiceNo: 1,
+  // Cloud mode only: incremental pull cursors and screenshot deletions waiting to reach storage.
+  sync: { entriesCursor: null, blocksCursor: null, pendingRemoteDeletes: [] },
 };
 
 const uid = () => crypto.randomUUID();
@@ -41,6 +43,7 @@ class Store {
       ...structuredClone(DEFAULTS),
       ...loaded,
       settings: { ...DEFAULTS.settings, ...(loaded.settings || {}) },
+      sync: { ...DEFAULTS.sync, ...(loaded.sync || {}) },
     };
   }
 
@@ -58,4 +61,4 @@ class Store {
   }
 }
 
-module.exports = { Store, uid };
+module.exports = { Store, uid, DEFAULTS };

@@ -77,6 +77,15 @@ export function lookup(state) {
   return { project, clientOf, rate, label, clients, projects };
 }
 
+// Team helpers. In local mode there is one user ("local") and entries have no userId.
+export const isMine = (state, rec) => !rec.userId || rec.userId === state.account.me;
+export const ofUser = (state, userId) => (rec) => (userId === '' ? true : (rec.userId || state.account.me) === userId);
+export function memberName(state, userId) {
+  if (!userId || userId === state.account.me) return 'You';
+  const m = state.account.members.find((x) => x.userId === userId);
+  return m ? m.name || m.email : 'Former member';
+}
+
 // Average activity for an entry from its 10-minute blocks (time-weighted).
 export function entryActivity(state, entryId) {
   let w = 0, sum = 0;

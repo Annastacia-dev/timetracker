@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { addDays, dayLabel, hrs, startOfDay, ymd } from '../lib.js';
-import { ShotCard } from './shared.jsx';
+import { addDays, dayLabel, hrs, ofUser, startOfDay, ymd } from '../lib.js';
+import { MemberSelect, ShotCard } from './shared.jsx';
 
 // Work diary: one card per 10-minute block, grouped by hour.
 export default function Screenshots({ state }) {
   const [day, setDay] = useState(startOfDay(Date.now()));
-  const blocks = state.blocks.filter((b) => b.start >= day && b.start < addDays(day, 1)).sort((a, b) => a.start - b.start);
+  const [who, setWho] = useState(state.account.me);
+  const blocks = state.blocks
+    .filter((b) => b.start >= day && b.start < addDays(day, 1))
+    .filter(ofUser(state, who))
+    .sort((a, b) => a.start - b.start);
   const tracked = blocks.reduce((s, b) => s + (b.end - b.start), 0);
   const avg = tracked ? Math.round(blocks.reduce((s, b) => s + b.activity * (b.end - b.start), 0) / tracked) : 0;
 
@@ -26,6 +30,7 @@ export default function Screenshots({ state }) {
         <button onClick={() => setDay(addDays(day, 1))} disabled={day >= startOfDay(Date.now())}><ChevronRight size={16} /></button>
         <strong>{dayLabel(day)}</strong>
         <span className="spacer" />
+        <MemberSelect state={state} value={who} onChange={setWho} />
         <span>Tracked <strong>{hrs(tracked)}</strong> · avg activity <strong>{avg}%</strong></span>
       </div>
       {!state.settings.screenshotsEnabled && (
@@ -36,7 +41,7 @@ export default function Screenshots({ state }) {
         <section key={h} className="hour">
           <div className="hour-label">{String(h).padStart(2, '0')}:00</div>
           <div className="shots">
-            {list.map((b) => <ShotCard key={b.id} block={b} state={state} />)}
+            {list.map((b) => <ShotCard key={b.id} block={b} state={state} showMember={who === ''} />)}
           </div>
         </section>
       ))}

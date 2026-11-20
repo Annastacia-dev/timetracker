@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Play, Square, RotateCcw } from 'lucide-react';
 import { useNow } from '../hooks.js';
 import {
-  actClass, addDays, attempt, clock, duration, entryActivity, hm, hrs, inRange, lookup, money, startOfDay, startOfWeek,
+  actClass, addDays, attempt, clock, duration, entryActivity, hm, hrs, inRange, isMine, lookup, money, startOfDay, startOfWeek,
 } from '../lib.js';
 import { ProjectSelect, ShotCard } from './shared.jsx';
 
@@ -12,7 +12,8 @@ export default function Tracker({ state, goto }) {
   const running = state.running && state.entries.find((e) => e.id === state.running.entryId);
   const active = state.projects.filter((p) => !p.archived);
 
-  const last = [...state.entries].reverse().find((e) => active.some((p) => p.id === e.projectId));
+  const myEntries = state.entries.filter((e) => isMine(state, e));
+  const last = [...myEntries].reverse().find((e) => active.some((p) => p.id === e.projectId));
   const [projectId, setProjectId] = useState(running?.projectId || last?.projectId || active[0]?.id || '');
   const [task, setTask] = useState(running?.task || '');
 
@@ -25,18 +26,24 @@ export default function Tracker({ state, goto }) {
 
   const today = startOfDay(now);
   const week = startOfWeek(now);
-  const todayEntries = inRange(state, today, addDays(today, 1), now);
-  const weekEntries = inRange(state, week, addDays(week, 7), now);
+  const todayEntries = inRange(state, today, addDays(today, 1), now).filter((e) => isMine(state, e));
+  const weekEntries = inRange(state, week, addDays(week, 7), now).filter((e) => isMine(state, e));
   const sum = (list) => list.reduce((s, e) => s + e.ms, 0);
   const earn = (list) => list.reduce((s, e) => s + (e.ms / 3600000) * L.rate(e.projectId), 0);
-  const todayBlocks = state.blocks.filter((b) => b.start >= today).sort((a, b) => b.start - a.start).slice(0, 6);
+  const todayBlocks = state.blocks.filter((b) => b.start >= today && isMine(state, b)).sort((a, b) => b.start - a.start).slice(0, 6);
 
   if (!state.clients.length || !active.length) {
     return (
       <div className="empty-hero">
         <h1>Track time for your clients</h1>
-        <p>Add a client and a project to start the timer.</p>
-        <button className="primary" onClick={() => goto('clients')}>Add a client</button>
+        {state.account.isAdmin ? (
+          <>
+            <p>Add a client and a project to start the timer.</p>
+            <button className="primary" onClick={() => goto('clients')}>Add a client</button>
+          </>
+        ) : (
+          <p>Your team admin hasn't added any projects yet. They'll appear here once they do.</p>
+        )}
       </div>
     );
   }
@@ -76,7 +83,7 @@ export default function Tracker({ state, goto }) {
         <Stat label="This week" value={hrs(sum(weekEntries))} sub={money(earn(weekEntries), state.settings.currency)} />
         <Stat
           label="Unbilled (all time)"
-          value={hrs(state.entries.filter((e) => e.end && !e.invoiceId).reduce((s, e) => s + duration(e), 0))}
+          value={hrs(myEntries.filter((e) => e.end && !e.invoiceId).reduce((s, e) => s + duration(e), 0))}
           sub="ready to invoice"
         />
       </div>

@@ -160,3 +160,31 @@ button svg { flex-shrink: 0; }
 .brand { gap: 10px; letter-spacing: -.2px; }
 button.big { gap: 8px; }
 h1, h2, .stat-value, .brand { letter-spacing: -.3px; }
+
+/* team / account */
+fieldset.plain { border: none; margin: 0; padding: 0; min-width: 0; }
+.team-name, .team-switch { margin: -8px 2px 12px; padding: 7px 10px; border-radius: 6px; background: #2a3245; color: #e6e9f0; font-size: 13px; font-weight: 600; border: 1px solid #36405a; }
+.team-switch { width: auto; }
+.team-switch option { color: var(--ink); background: #fff; }
+.nav-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.nav-foot .nav-timer { margin-top: 0; }
+.account-box { border-top: 1px solid #2f3a51; padding: 12px 4px 0; display: flex; flex-direction: column; gap: 8px; }
+.account-user { display: flex; align-items: center; gap: 10px; color: #e6e9f0; font-size: 13px; min-width: 0; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: #0f9d8a; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+.dim { color: #8f98ab; }
+.sync-status { background: none; border: none; color: #8f98ab; font-size: 12px; padding: 2px 0; }
+.sync-status.warn { color: #f2b84b; }
+.icon-btn { background: none; border: none; color: #8f98ab; padding: 4px; }
+.icon-btn:hover { color: #fff; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.member-select { width: auto; }
+
+.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 30px; background: linear-gradient(160deg, #eef7f5, var(--bg)); }
+.auth-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 32px 34px; width: 400px; box-shadow: 0 20px 50px #1d243314; }
+.auth-card.wide { width: 560px; }
+.auth-card h1 { font-size: 22px; margin: 14px 0 18px; }
+.auth-logo { width: 48px; height: 48px; border-radius: 12px; }
+button.wide { width: 100%; margin-top: 8px; padding: 10px; }
+.auth-links { display: flex; justify-content: space-between; margin-top: 14px; }
+.auth-card .card { margin: 14px 0; }
