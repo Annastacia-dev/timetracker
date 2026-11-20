@@ -10,6 +10,24 @@ const { invoiceHtml } = require('./invoice.cjs');
 const cloudLib = require('./cloud.cjs');
 const updates = require('./updates.cjs');
 
+// Small diagnostic log (startup, quit, updates, sync errors) in %APPDATA%TimeTrackerlogsmain.log.
+// Rolled over at 1 MB. No tokens, emails or time-entry contents are written.
+const LOG_START = Date.now();
+function log(msg) {
+  const line = `${new Date().toISOString()} [+${((Date.now() - LOG_START) / 1000).toFixed(1)}s] ${msg}
+`;
+  if (!app.isPackaged) process.stdout.write(line);
+  try {
+    const dir = path.join(app.getPath('userData'), 'logs');
+    const file = path.join(dir, 'main.log');
+    fs.mkdirSync(dir, { recursive: true });
+    if (fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024) fs.renameSync(file, path.join(dir, 'main.old.log'));
+    fs.appendFileSync(file, line);
+  } catch { /* logging must never break the app */ }
+}
+process.on('uncaughtException', (err) => log(`uncaught: ${err?.stack || err}`));
+process.on('unhandledRejection', (err) => log(`unhandled rejection: ${err?.stack || err}`));
+
 // Activity/screenshot blocks, aligned to the wall clock. TT_BLOCK_MS shortens them for the smoke test.
 const BLOCK_MS = Number(process.env.TT_BLOCK_MS) || 10 * 60 * 1000;
 const SYNC_EVERY_MS = 60 * 1000;
@@ -455,6 +473,7 @@ function openLocal() {
 // ---------- cloud: auth + teams ----------
 let syncTimer = null;
 let syncing = null;
+let sessionChecked = true; // false while a cached start is still checking the saved session online
 
 function scheduleSync(delay = 2000) {
   if (!cloud() || !store) return;
@@ -464,7 +483,7 @@ function scheduleSync(delay = 2000) {
 
 // Push local changes, then pull the team, clients/projects/invoices and changed time.
 function syncNow() {
-  if (!cloud() || !store || !account.teamId || !sb) return Promise.resolve();
+  if (!cloud() || !store || !account.teamId || !sb || !sessionChecked) return Promise.resolve();
   if (syncing) return syncing;
   const st = store;
   const ctx = { teamId: account.teamId, userId: me(), shotsDir, runningId: st.data.running?.entryId };
@@ -489,7 +508,7 @@ function syncNow() {
     } catch (err) {
       const offline = err instanceof cloudLib.OfflineError || cloudLib.isNetwork(err);
       account.sync = { ...account.sync, online: !offline, error: offline ? null : err.message };
-      if (!offline) console.warn('sync failed', err);
+      if (!offline) { console.warn('sync failed', err); log(`sync failed: ${err.message}`); }
     } finally {
       account.sync.syncing = false;
       st.save();
@@ -584,12 +603,52 @@ async function initAccount() {
     // Supabase calls must not run inside this callback.
     if (event === 'SIGNED_OUT' && account.user) setTimeout(afterSignOut, 0);
   });
+  // Returning user with a cached team: open it straight away from this PC's copy and check the
+  // session online in the background. Renewing an expired token can take seconds (or ~30 s offline,
+  // while the auth library retries), and the timer must not wait for that.
+  const saved = storedUser();
+  if (saved && prefs.teams[saved.id]?.length) {
+    log('startup: opening cached team, verifying session in background');
+    sessionChecked = false;
+    await afterSignIn(saved, { offline: true });
+    verifySession(saved.id).finally(() => { sessionChecked = true; });
+    return;
+  }
   const { data, error } = await sb.auth.getSession();
   if (data?.session) return afterSignIn(data.session.user);
   const offlineUser = error && cloudLib.isNetwork(error) ? storedUser() : null;
   if (offlineUser) return afterSignIn(offlineUser, { offline: true });
   account.phase = 'ready';
   commit();
+}
+
+// Background half of a cached start: renew the session, accept invites, refresh the team list.
+// Offline: keep working from the cache (sync retries on its schedule). Session rejected: sign out.
+async function verifySession(userId) {
+  const { data, error } = await sb.auth.getSession();
+  if (account.user?.id !== userId) return; // signed out or switched meanwhile
+  if (!data?.session) {
+    if (error && cloudLib.isNetwork(error)) { log('startup: offline, using cached data'); return commit(); }
+    log(`startup: saved session no longer valid (${error?.message || 'none'}), signing out`);
+    toast('Please sign in again.');
+    return afterSignOut();
+  }
+  const u = data.session.user;
+  account.user = { id: u.id, email: u.email, name: u.user_metadata?.full_name || '' };
+  try {
+    cloudLib.must(await sb.rpc('accept_invites'));
+    await refreshTeams();
+  } catch (err) {
+    if (!(err instanceof cloudLib.OfflineError) && !cloudLib.isNetwork(err)) toast(err.message, 'error');
+    return commit();
+  }
+  if (account.user?.id !== userId) return;
+  log('startup: session verified');
+  sessionChecked = true;
+  if (account.teamId && !account.teams.some((t) => t.id === account.teamId)) return leftTeam('You no longer have access to this team.');
+  if (!account.teamId && account.teams[0]) return openTeam(account.teams[0].id);
+  commit();
+  syncNow();
 }
 
 // ---------- timetracker:// auth links ----------
@@ -960,6 +1019,7 @@ app.on('second-instance', (_e, argv) => {
 app.on('open-url', (e, url) => { e.preventDefault(); handleAuthLink(url); }); // macOS
 
 app.whenReady().then(async () => {
+  log(`start: TimeTracker ${app.getVersion()} ${app.isPackaged ? 'installed' : 'dev'}`);
   ensureDevShortcut();
   cleanupOldDevRegistration();
   registerProtocol();
@@ -993,6 +1053,7 @@ app.whenReady().then(async () => {
   if (pendingLink) { const link = pendingLink; pendingLink = null; handleAuthLink(link); }
   setInterval(() => syncNow(), SYNC_EVERY_MS);
   updates.start({
+    log,
     onReady: (version) => {
       updateTray();
       toast(`TimeTracker ${version} is ready. It installs when you quit, or use "Restart to update" in the tray menu.`);
@@ -1011,10 +1072,14 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', () => {
+  log(`quit: before-quit (timer ${store && S().running ? 'running' : 'off'}, sync ${syncing ? 'in progress' : 'idle'})`);
   quitting = true;
   if (store) {
     if (S().running) stopTimer();
     store.saveNow();
   }
+  log('quit: saved');
 });
+app.on('will-quit', () => log('quit: will-quit'));
+app.on('quit', (_e, code) => log(`quit: exiting (code ${code})`));
 app.on('window-all-closed', () => {}); // stay alive in the tray
