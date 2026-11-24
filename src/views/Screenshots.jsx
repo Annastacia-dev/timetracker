@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addDays, dayLabel, hrs, ofUser, startOfDay, ymd } from '../lib.js';
-import { MemberSelect, ShotCard } from './shared.jsx';
+import { MemberSelect, ScreenshotsOff, ShotCard } from './shared.jsx';
 
 // Work diary: one card per 10-minute block, grouped by hour.
-export default function Screenshots({ state }) {
+export default function Screenshots({ state, goto }) {
   const [day, setDay] = useState(startOfDay(Date.now()));
   const [who, setWho] = useState(state.account.me);
   const blocks = state.blocks
@@ -33,9 +33,7 @@ export default function Screenshots({ state }) {
         <MemberSelect state={state} value={who} onChange={setWho} />
         <span>Tracked <strong>{hrs(tracked)}</strong> · avg activity <strong>{avg}%</strong></span>
       </div>
-      {!state.settings.screenshotsEnabled && (
-        <p className="notice">Screenshots are off. Activity levels are still recorded. Turn screenshots on in Settings.</p>
-      )}
+      <ScreenshotsOff state={state} goto={goto} />
       {!blocks.length && <p className="muted">No tracked activity on this day.</p>}
       {[...hours].map(([h, list]) => (
         <section key={h} className="hour">

@@ -52,6 +52,20 @@ const enc = (p) => p.split('/').map(encodeURIComponent).join('/');
 const shotSrc = (b) => (b.screenshot ? `tt-shot://shots/${enc(b.screenshot)}` : b.remoteShot ? `tt-shot://shots/remote/${enc(b.remoteShot)}` : null);
 
 
+// Explains empty screenshot cards. Only people who can change the setting get the Settings link.
+export function ScreenshotsOff({ state, goto }) {
+  if (state.settings.screenshotsEnabled) return null;
+  const canChange = state.account.mode === 'local' || state.account.isAdmin;
+  return (
+    <p className="notice">
+      Screenshots are off. Activity levels are still recorded.{' '}
+      {canChange
+        ? <button className="link" onClick={() => goto('settings')}>Turn on in Settings</button>
+        : 'Your team admin can turn them on.'}
+    </p>
+  );
+}
+
 export function ShotCard({ block, state, showProject = true, showMember = false }) {
   const [open, setOpen] = useState(false);
   const L = lookup(state);

@@ -4,7 +4,7 @@ import { useNow } from '../hooks.js';
 import {
   actClass, addDays, attempt, clock, duration, entryActivity, hm, hrs, inRange, isMine, lookup, money, startOfDay, startOfWeek,
 } from '../lib.js';
-import { ProjectSelect, ShotCard } from './shared.jsx';
+import { ProjectSelect, ScreenshotsOff, ShotCard } from './shared.jsx';
 
 export default function Tracker({ state, goto }) {
   const now = useNow();
@@ -124,6 +124,7 @@ export default function Tracker({ state, goto }) {
           <h2 className="row between">
             Latest activity <button className="link" onClick={() => goto('screenshots')}>Open work diary</button>
           </h2>
+          <ScreenshotsOff state={state} goto={goto} />
           <div className="shots">
             {todayBlocks.map((b) => <ShotCard key={b.id} block={b} state={state} />)}
           </div>
